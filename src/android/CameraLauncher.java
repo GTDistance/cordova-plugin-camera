@@ -29,6 +29,7 @@ import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
+import android.widget.Toast;
 import org.apache.cordova.BuildHelper;
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaPlugin;
@@ -224,7 +225,7 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
         else {
             cache = cordova.getActivity().getCacheDir();
         }
-
+//        cache = cordova.getActivity().getCacheDir();
         // Create the cache directory if it doesn't exist
         cache.mkdirs();
         return cache.getAbsolutePath();
@@ -366,26 +367,35 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
         croppedUri = null;
         if (this.mediaType == PICTURE) {
             intent.setType("image/*");
-            if (this.allowEdit) {
+            if (this.allowEdit){
                 intent.setAction(Intent.ACTION_PICK);
-                intent.putExtra("crop", "true");
-                if (targetWidth > 0) {
-                    intent.putExtra("outputX", targetWidth);
-                }
-                if (targetHeight > 0) {
-                    intent.putExtra("outputY", targetHeight);
-                }
-                if (targetHeight > 0 && targetWidth > 0 && targetWidth == targetHeight) {
-                    intent.putExtra("aspectX", 1);
-                    intent.putExtra("aspectY", 1);
-                }
-                File photo = createCaptureFile(JPEG);
-                croppedUri = Uri.fromFile(photo);
-                intent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, croppedUri);
-            } else {
+            }else {
                 intent.setAction(Intent.ACTION_GET_CONTENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
             }
+//            if (this.allowEdit) {
+//                String status=Environment.getExternalStorageState();
+//                intent.setAction(Intent.ACTION_PICK);
+//                intent.putExtra("crop", "true");
+//                if (targetWidth > 0) {
+//                    intent.putExtra("outputX", targetWidth);
+//                }
+//                if (targetHeight > 0) {
+//                    intent.putExtra("outputY", targetHeight);
+//                }
+//                if (targetHeight > 0 && targetWidth > 0 && targetWidth == targetHeight) {
+//                    intent.putExtra("aspectX", 1);
+//                    intent.putExtra("aspectY", 1);
+//                }
+//                File photo = createCaptureFile(JPEG);
+//                croppedUri = Uri.fromFile(photo);
+//                System.out.println(croppedUri);
+//                intent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, croppedUri);
+//            } else {
+//                intent.setAction(Intent.ACTION_GET_CONTENT);
+//                intent.addCategory(Intent.CATEGORY_OPENABLE);
+//            }
+
         } else if (this.mediaType == VIDEO) {
             intent.setType("video/*");
             title = GET_VIDEO;
@@ -592,7 +602,7 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
             throw new IllegalStateException();
         }
 
-        this.cleanup(FILE_URI, this.imageUri.getFileUri(), galleryUri, bitmap);
+        this.cleanup(FILE_URI, galleryUri, bitmap);
         bitmap = null;
     }
 
@@ -823,13 +833,20 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
         // If retrieving photo from library
         else if ((srcType == PHOTOLIBRARY) || (srcType == SAVEDPHOTOALBUM)) {
             if (resultCode == Activity.RESULT_OK && intent != null) {
-                final Intent i = intent;
-                final int finalDestType = destType;
-                cordova.getThreadPool().execute(new Runnable() {
-                    public void run() {
-                        processResultFromGallery(finalDestType, i);
-                    }
-                });
+                if (this.allowEdit){
+                    Uri tmpFile = FileProvider.getUriForFile(cordova.getActivity(),
+                            applicationId + ".provider",
+                            createCaptureFile(this.encodingType));
+                    performCrop(intent.getData(), destType, intent);
+                }else {
+                    final Intent i = intent;
+                    final int finalDestType = destType;
+                    cordova.getThreadPool().execute(new Runnable() {
+                        public void run() {
+                            processResultFromGallery(finalDestType, i);
+                        }
+                    });
+                }
             } else if (resultCode == Activity.RESULT_CANCELED) {
                 this.failPicture("No Image Selected");
             } else {
@@ -1182,13 +1199,17 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
      *
      * @param newImage
      */
-    private void cleanup(int imageType, Uri oldImage, Uri newImage, Bitmap bitmap) {
+    private void cleanup(int imageType,  Uri newImage, Bitmap bitmap) {
         if (bitmap != null) {
             bitmap.recycle();
         }
 
         // Clean up initial camera-written image file.
-        (new File(FileHelper.stripFileProtocol(oldImage.toString()))).delete();
+
+        if (imageUri!=null){
+            Uri oldImage = this.imageUri.getFileUri();
+            (new File(FileHelper.stripFileProtocol(oldImage.toString()))).delete();
+        }
 
         checkForDuplicateImage(imageType);
         // Scan for the gallery to update pic refs in gallery
