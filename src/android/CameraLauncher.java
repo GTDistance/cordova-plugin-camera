@@ -29,6 +29,7 @@ import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
+import android.content.ContentResolver;
 import android.widget.Toast;
 import org.apache.cordova.BuildHelper;
 import org.apache.cordova.CallbackContext;
@@ -431,6 +432,7 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
    */
   private void performCrop(Uri picUri, int destType, Intent cameraIntent) {
     try {
+
         Intent cropIntent = new Intent("com.android.camera.action.CROP");
         // indicate image type and Uri
         cropIntent.setDataAndType(picUri, "image/*");
@@ -474,6 +476,7 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
       }
     }
   }
+
 
     /**
      * Applies all needed transformation to the image received from the camera.
@@ -845,7 +848,9 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
                     Uri tmpFile = FileProvider.getUriForFile(cordova.getActivity(),
                             applicationId + ".provider",
                             createCaptureFile(this.encodingType));
-                    performCrop(intent.getData(), destType, intent);
+                    String filePath = getFilePathFromContentUri(intent.getData(),cordova.getActivity().getContentResolver());
+                    File file = new File(filePath);
+                    performCrop(getImageContentUri(file), destType, intent);
                 }else {
                     final Intent i = intent;
                     final int finalDestType = destType;
@@ -861,6 +866,47 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
                 this.failPicture("Selection did not complete!");
             }
         }
+    }
+
+    public Uri getImageContentUri(File imageFile) {
+        String filePath = imageFile.getAbsolutePath();
+        Cursor cursor = cordova.getActivity().getContentResolver().query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                new String[] { MediaStore.Images.Media._ID },
+                MediaStore.Images.Media.DATA + "=? ",
+                new String[] { filePath }, null);
+
+        if (cursor != null && cursor.moveToFirst()) {
+            int id = cursor.getInt(cursor
+                    .getColumnIndex(MediaStore.MediaColumns._ID));
+            Uri baseUri = Uri.parse("content://media/external/images/media");
+            return Uri.withAppendedPath(baseUri, "" + id);
+        } else {
+            if (imageFile.exists()) {
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Images.Media.DATA, filePath);
+                return cordova.getActivity().getContentResolver().insert(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            } else {
+                return null;
+            }
+        }
+    }
+    public static String getFilePathFromContentUri(Uri selectedVideoUri,
+                                                   ContentResolver contentResolver) {
+        String filePath;
+        String[] filePathColumn = {MediaStore.MediaColumns.DATA};
+
+        Cursor cursor = contentResolver.query(selectedVideoUri, filePathColumn, null, null, null);
+//      也可用下面的方法拿到cursor
+//      Cursor cursor = this.context.managedQuery(selectedVideoUri, filePathColumn, null, null, null);
+
+        cursor.moveToFirst();
+
+        int columnIndex = cursor.getColumnIndex(filePathColumn[0]);
+        filePath = cursor.getString(columnIndex);
+        cursor.close();
+        return filePath;
     }
 
     private int exifToDegrees(int exifOrientation) {
